@@ -93,7 +93,6 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
                 text = "5221 Madison ";
                  addressResults = MapActivity.this.getAddresses(text.toString());
                  results.clear();
-                 int l = 5;
                  for (Address addressResult : addressResults)
                  {
                  String thisLine = "";
