@@ -4,5 +4,12 @@
     <string name="app_name">MyMap</string>
     <string name="hello_world">Hello world!</string>
     <string name="action_settings">Settings</string>
+    <string name="map_save_button_text">Save</string>
+    <string name="map_direction_button_text">Directions</string>
+    <string name="pref_has_saved_location">loc_saved</string>
+    <string name="pref_saved_latitude">latitude</string>
+    <string name="pref_saved_longitude">longitude</string>
+    <string name="pref_saved_title">title</string>
+    <string name="map_goto_button_text">Go To</string>
 
 </resources>
