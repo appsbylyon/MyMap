@@ -1,10 +1,6 @@
 package com.appsbylyon.mymap.app;
 
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-
 import android.app.Activity;
 import android.content.Context;
 import android.location.Address;
@@ -14,6 +10,7 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
@@ -23,7 +20,6 @@ import android.widget.AutoCompleteTextView;
 import android.widget.Toast;
 
 import com.appsbylyon.mymap.R;
-
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesClient.ConnectionCallbacks;
 import com.google.android.gms.common.GooglePlayServicesClient.OnConnectionFailedListener;
@@ -38,6 +34,11 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
 public class MapActivity extends Activity implements ConnectionCallbacks, OnConnectionFailedListener, LocationListener, OnMyLocationButtonClickListener, OnItemClickListener
 {
     private GoogleMap mMap;
@@ -51,6 +52,10 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
     private ArrayList<String> results = new ArrayList<String>();
 
     private InputMethodManager imm;
+    private ArrayAdapter<String> searchAdapter;
+
+    private long lastSearch;
+
 
     private static final LocationRequest REQUEST = LocationRequest.create()
             .setInterval(5000)         // 5 seconds
@@ -67,74 +72,72 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
         imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
 
         searchBar = (AutoCompleteTextView) findViewById(R.id.map_activity_search_bar);
-
-
+        //searchBar.setThreshold(1);
+        //searchAdapter = new ArrayAdapter<String>(MapActivity.this, android.R.layout.simple_dropdown_item_1line, results);
+       // searchBar.setAdapter(searchAdapter);
+        //searchAdapter.setNotifyOnChange(true);
         searchBar.addTextChangedListener(new TextWatcher()
         {
 
             @Override
-            public void afterTextChanged(Editable view)
-            {
-
-            }
+            public void afterTextChanged(Editable view){}
 
             @Override
-            public void beforeTextChanged(CharSequence text, int arg1, int arg2, int arg3)
-            {
-                //String text = "jack in the box";
-
-            }
+            public void beforeTextChanged(CharSequence text, int arg1, int arg2, int arg3){}
 
             @Override
             public void onTextChanged(CharSequence text, int start, int before, int count)
             {
-                //Toast.makeText(MapActivity.this, text.toString(), Toast.LENGTH_SHORT).show();
-               // new SearchAddress().execute(text.toString());
-                text = "5221 Madison ";
-                 addressResults = MapActivity.this.getAddresses(text.toString());
-                 results.clear();
-                 for (Address addressResult : addressResults)
-                 {
-                 String thisLine = "";
-                     if (addressResult.getFeatureName() != null)
-                     {
-                          thisLine += addressResult.getFeatureName();
-                         if (addressResult.getMaxAddressLineIndex() > 0)
-                         {
-                             if (thisLine.length() != 0)
-                             {
-                                thisLine +=", ";
-                             }
-                             for (int i = 0; i < addressResult.getMaxAddressLineIndex(); i++)
-                             {
-                                 if (addressResult.getAddressLine(i) != null)
-                                 {
-                                     if (!addressResult.getAddressLine(i).equalsIgnoreCase(addressResult.getFeatureName()))
-                                     {
-                                        thisLine += addressResult.getAddressLine(i);
-                                        if (i!=addressResult.getMaxAddressLineIndex()-1)
-                                        {
-                                            thisLine += ", ";
-                                        }
-                                     }
-                                 }
-                             }
-                             results.add(thisLine);
-                         }
+                lastSearch = System.currentTimeMillis();
+                new SearchAddress().execute(text.toString().trim(), Long.toString(lastSearch));
+                /**
+                addressResults = MapActivity.this.getAddresses(text.toString());
+                if (addressResults != null)
+                {
+                    results.clear();
+                    for (Address addressResult : addressResults)
+                    {
+                    String thisLine = "";
+                        if (addressResult.getFeatureName() != null)
+                        {
+                            thisLine += addressResult.getFeatureName();
+                        }
+                        if (addressResult.getMaxAddressLineIndex() > 0)
+                        {
+                            if (thisLine.length() != 0)
+                            {
+                               thisLine +=", ";
+                            }
+                            for (int i = 0; i < addressResult.getMaxAddressLineIndex(); i++)
+                            {
+                                if (addressResult.getAddressLine(i) != null)
+                                {
+                                    if (!addressResult.getAddressLine(i).equalsIgnoreCase(addressResult.getFeatureName()))
+                                    {
+                                       thisLine += addressResult.getAddressLine(i);
+                                       if (i!=addressResult.getMaxAddressLineIndex()-1)
+                                       {
+                                           thisLine += ", ";
+                                       }
+                                    }
+                                }
+                            }
+                            results.add(thisLine);
+                        }
 
-                     }
-                     if (!results.isEmpty())
-                     {
-                         ArrayAdapter<String> searchAdapter = new ArrayAdapter<String>(MapActivity.this, android.R.layout.simple_dropdown_item_1line, results);
-                         searchBar.setAdapter(searchAdapter);
-                     }
+                    }
+                    if (!results.isEmpty())
+                    {
+                        CustomAutoCompleteAdapter searchAdapter = new CustomAutoCompleteAdapter(MapActivity.this, results);
+                        searchBar.setAdapter(searchAdapter);
                     }
 
+                }
+                 */
             }
 
         });
 
-        new SearchAddress().execute();
         searchBar.setOnItemClickListener(this);
 
         geoCoder =  new Geocoder(this, Locale.US);
@@ -152,18 +155,54 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
         mLocationClient.connect();
     }
 
-    private synchronized List<Address> getAddresses(String searchName)
+    private List<Address> getAddresses(String searchName)
     {
+        if (Geocoder.isPresent())
+        {
+            try
+            {
+                return geoCoder.getFromLocationName(searchName, 5);
+            }
+            catch(IOException IOE)
+            {
+                Toast.makeText(this, "Unable to get location info", Toast.LENGTH_SHORT).show();
+                Log.e("GeoAddress", "Failed to get location info", IOE);
+                return null;
+            }
+        }
+        else
+        {
+            Toast.makeText(this, "GeoCoder is Unavailable!", Toast.LENGTH_SHORT).show();
+            return null;
+        }
+        /**
         try
         {
-            return geoCoder.getFromLocationName(searchName, 5);
+           List<Address> addys =  geoCoder.getFromLocationName("8054 Alma Mesa Way", 1);
+           if (!addys.isEmpty())
+           {
+               Address addy = addys.get(0);
+               String line = "";
+               line += "Feature Name: "+addy.getFeatureName();
+               int maxLine = addy.getMaxAddressLineIndex();
+               if (maxLine > 0)
+               {
+                   for (int i = 0; i< maxLine; i++)
+                   {
+                       String thisLine = addy.getAddressLine(i);
+
+                   }
+               }
+
+           }
 
         }
         catch (Exception E)
         {
             Toast.makeText(this, "Unable to search for results!", Toast.LENGTH_SHORT).show();
         }
-        return null;
+         */
+        //return null;
     }
 
     private void zoomToAddress(Address address)
@@ -200,6 +239,7 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
             if (mMap != null) {
                 mMap.setMyLocationEnabled(true);
                 mMap.setOnMyLocationButtonClickListener(this);
+
             }
         }
     }
@@ -279,9 +319,10 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
         @Override
         protected ResultBundle doInBackground(String... searchText)
         {
-            publishProgress(searchText);
+            //publishProgress(searchText);
 
             ResultBundle bundle = new ResultBundle();
+            bundle.setBundleTime(Long.parseLong(searchText[1]));
             ArrayList<Address> addressResults =  new ArrayList<Address>();
             Geocoder localGeo = new Geocoder(MapActivity.this, Locale.US);
             try
@@ -297,10 +338,12 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
             for (Address addressResult : addressResults)
             {
                 String thisLine = "";
-                if (addressResult.getFeatureName() != null)
-                {
-                    thisLine += addressResult.getFeatureName();
-                    if (addressResult.getMaxAddressLineIndex() > 0)
+                //if (addressResult.getFeatureName() != null)
+                //{
+                //    thisLine += addressResult.getFeatureName();
+               // }
+                boolean featureNameRepeated = false;
+                if (addressResult.getMaxAddressLineIndex() > 0)
                     {
                         if (thisLine.length() != 0) {
                             thisLine +=", ";
@@ -317,11 +360,22 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
                                         thisLine += ", ";
                                     }
                                 }
+                                else
+                                {
+                                    featureNameRepeated = true;
+                                }
+                            }
+                        }
+                        if (featureNameRepeated)
+                        {
+                            if (addressResult.getFeatureName() != null)
+                            {
+                                thisLine = addressResult.getFeatureName() + ", " + thisLine;
                             }
                         }
                         localResults.add(thisLine);
                     }
-                }
+
 
             }
             bundle.setAddresses(addressResults);
@@ -334,13 +388,7 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
 
         protected void onProgressUpdate(String ...strings)
         {
-            int count = 1;
-            String fullString = "";
-            for (String string : strings)
-            {
-                fullString += count+": "+string+"< ";
-            }
-            Toast.makeText(MapActivity.this, fullString, Toast.LENGTH_SHORT).show();
+
         }
 
         protected void onPostExecute(ResultBundle results)
@@ -357,13 +405,14 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
 
         results = bundle.getSearchResults();
         addressResults = bundle.getAddresses();
-
-        if (!results.isEmpty())
+        if (bundle.getBundleTime() == lastSearch)
         {
-            ArrayAdapter<String> searchAdapter = new ArrayAdapter<String>(MapActivity.this, android.R.layout.simple_dropdown_item_1line, results);
-            searchBar.setAdapter(searchAdapter);
+            if (!results.isEmpty())
+            {
+                CustomAutoCompleteAdapter searchAdapter = new CustomAutoCompleteAdapter(MapActivity.this, results);
+                searchBar.setAdapter(searchAdapter);
+            }
         }
-
         //}
     }
 }
