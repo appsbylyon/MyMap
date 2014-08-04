@@ -2,9 +2,8 @@ package com.appsbylyon.mymap.app;
 
 
 import android.app.Activity;
-import android.app.Dialog;
+import android.app.FragmentManager;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Point;
@@ -25,11 +24,13 @@ import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
-import android.widget.LinearLayout;
+import android.widget.CompoundButton;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.appsbylyon.mymap.R;
+import com.appsbylyon.mymap.app.com.appsbylyon.mymap.app.fragments.NewLocationDialog;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesClient.ConnectionCallbacks;
 import com.google.android.gms.common.GooglePlayServicesClient.OnConnectionFailedListener;
@@ -55,7 +56,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class MapActivity extends Activity implements ConnectionCallbacks, OnConnectionFailedListener, LocationListener, OnMyLocationButtonClickListener, OnItemClickListener, View.OnClickListener
+public class MapActivity extends Activity implements ConnectionCallbacks, OnConnectionFailedListener,
+        LocationListener, OnMyLocationButtonClickListener, OnItemClickListener, View.OnClickListener,
+        NewLocationDialog.NewLocationDialogListener
 {
     private GoogleMap mMap;
     private LocationClient mLocationClient;
@@ -69,6 +72,9 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
     private Button saveButton;
     private Button directionsButton;
     private Button gotoButton;
+    private Button clearButton;
+
+    private Switch trackSwitch;
 
     private SharedPreferences prefs;
 
@@ -88,9 +94,18 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
 
     private double currLat = -360;
     private double currLong = 0;
+    private double lastMyLat = 0;
+    private double lastMyLong = 0;
+
     private String currTitle;
 
+    private ArrayList<LatLng> trackPoints = new ArrayList<LatLng>();
+
+    private boolean isTracking = false;
+
     private GMapV2Direction  md = new GMapV2Direction();
+
+    private SaveLocations locations;
 
 
     private static final LocationRequest REQUEST = LocationRequest.create()
@@ -122,6 +137,19 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
             savedLocationLabel.setText("Saved Location: "+savedLat+", "+savedLong);
         }
 
+        trackSwitch = (Switch) findViewById(R.id.track_switch);
+        trackSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
+                isTracking = isChecked;
+                if (!isChecked)
+                {
+                    trackPoints.clear();
+                    updateTrack(null);
+                }
+            }
+        });
+
         saveButton = (Button) findViewById(R.id.map_save_button);
         saveButton.setOnClickListener(this);
 
@@ -130,6 +158,9 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
 
         gotoButton = (Button) findViewById(R.id.map_goto_button);
         gotoButton.setOnClickListener(this);
+
+        clearButton = (Button) findViewById(R.id.clear_button);
+        clearButton.setOnClickListener(this);
 
         locationLabel = (TextView) findViewById(R.id.map_location_label);
         locationLabel.setText("No Location");
@@ -167,13 +198,20 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
     public void onClick(View view)
     {
         int id = view.getId();
-
+        FragmentManager fm = this.getFragmentManager();
+        Bundle bundle = new Bundle();
         switch(id)
         {
             case R.id.map_save_button:
 
                 if (currLat != -360)
                 {
+                    NewLocationDialog newLoc = new NewLocationDialog();
+                    bundle.putDouble(getString(R.string.new_location_lat_id), currLat);
+                    bundle.putDouble(getString(R.string.new_location_long_id), currLong);
+                    newLoc.setArguments(bundle);
+                    newLoc.show(fm, "new_location_fragment_layout");
+                    /**
                     SharedPreferences.Editor edit = prefs.edit();
                     edit.putFloat(getString(R.string.pref_saved_latitude), (float) currLat);
                     edit.putFloat(getString(R.string.pref_saved_longitude), (float) currLong);
@@ -183,6 +221,7 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
                     savedLocationLabel.setText("Saved Location: " + currLat + ", " + currLong);
                     savedLat = currLat;
                     savedLong = currLong;
+                     */
                 }
                 break;
             case R.id.map_goto_button:
@@ -200,7 +239,10 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
 
                     findDirections(savedLat, savedLong, currLat, currLong, GMapV2Direction.MODE_DRIVING );
                 }
-
+                break;
+            case R.id.clear_button:
+                searchBar.setText("");
+                break;
 
         }
     }
@@ -300,7 +342,7 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
         marker.title(currTitle);
         marker.icon(BitmapDescriptorFactory.fromResource(R.drawable.infinity));
         mMap.addMarker(marker);
-        locationLabel.setText("Location: " + currLat + ", " + currLong);
+        setCurrLocationLabel();
 
     }
 
@@ -315,12 +357,38 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
         marker.title(mTitle);
         marker.icon(BitmapDescriptorFactory.fromResource(R.drawable.infinity));
         mMap.addMarker(marker);
-        locationLabel.setText("Location: " + currLat + ", " + currLong);
+        setCurrLocationLabel();
 
     }
 
     @Override
-    public void onLocationChanged(Location location){}
+    public void onLocationChanged(Location location)
+    {
+        lastMyLat = location.getLatitude();
+        lastMyLong = location.getLongitude();
+        if (isTracking)
+        {
+            updateTrack(location);
+            zoomToAddress(lastMyLat, lastMyLong);
+        }
+    }
+
+    public void updateTrack(Location location)
+    {
+        if (location != null)
+        {
+            LatLng nextPoint = new LatLng(location.getLatitude(), location.getLongitude());
+            trackPoints.add(nextPoint);
+        }
+        PolylineOptions rectLine = new PolylineOptions().width(3).color(Color.BLUE);
+
+        for(int i = 0 ; i < trackPoints.size() ; i++)
+        {
+            rectLine.add(trackPoints.get(i));
+        }
+        mMap.addPolyline(rectLine);
+
+    }
 
     @Override
     public void onConnected(Bundle connectionHint) {
@@ -336,7 +404,19 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
     public void onConnectionFailed(ConnectionResult result) {}
 
     @Override
-    public boolean onMyLocationButtonClick(){return false;}
+    public boolean onMyLocationButtonClick()
+    {
+        currLat = lastMyLat;
+        currLong = lastMyLong;
+        currTitle = "My Last Location";
+        setCurrLocationLabel();
+        return false;
+    }
+
+    private void setCurrLocationLabel()
+    {
+        locationLabel.setText("Location: "+currLat+", "+currLong);
+    }
 
     @Override
     public void onItemClick(AdapterView<?> parent, View view, int position, long rowId)
@@ -348,6 +428,11 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
 
     }
 
+    @Override
+    public void saveLocation(ALocation newLocation)
+    {
+
+    }
 
 
     private class SearchAddress extends AsyncTask<String, String, ResultBundle>
@@ -527,6 +612,18 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
         private void processException() {
             Toast.makeText(activity, "Error getting directions!", Toast.LENGTH_SHORT).show();
         }
+
+    }
+
+    private class SaveLocations extends AsyncTask<ALocation, Void, Void>
+    {
+        @Override
+        protected Void doInBackground(ALocation... arg0)
+        {
+
+            return null;
+        }
+
 
     }
 }

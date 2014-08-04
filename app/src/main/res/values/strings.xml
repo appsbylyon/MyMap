@@ -6,10 +6,20 @@
     <string name="action_settings">Settings</string>
     <string name="map_save_button_text">Save</string>
     <string name="map_direction_button_text">Directions</string>
+    <string name="map_track_me_button_text">Track Me</string>
+    <string name="map_open_button_text">Open</string>
     <string name="pref_has_saved_location">loc_saved</string>
     <string name="pref_saved_latitude">latitude</string>
     <string name="pref_saved_longitude">longitude</string>
     <string name="pref_saved_title">title</string>
-    <string name="map_goto_button_text">Go To</string>
-
+    <string name="map_goto_button_text">Goto</string>
+    <string name="new_location_title_hint">LOCATION NAME</string>
+    <string name="new_location_cancel_button_text">Cancel</string>
+    <string name="new_location_confirm_button_text">Save</string>
+    <string name="new_location_title_text">New Location</string>
+    <string name="new_location_icon_label_text">Icon:</string>
+    <string name="new_location_lat_id">lat</string>
+    <string name="new_location_long_id">long</string>
+    <dimen name="standard_text_size">20dp</dimen>
+    <dimen name="standard_marker_size">40dp</dimen>
 </resources>

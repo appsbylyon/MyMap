@@ -12,6 +12,12 @@
         <Button
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:text="@string/map_open_button_text"
+            android:id="@+id/map_open_button" />
+
+        <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:text="@string/map_save_button_text"
             android:id="@+id/map_save_button" />
 
@@ -46,17 +52,38 @@
             android:id="@+id/map_location_label" />
     </LinearLayout>
 
-    <AutoCompleteTextView
-        android:id="@+id/map_activity_search_bar"
-        android:layout_width="match_parent"
+    <Switch
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:singleLine="true"
-        android:ems="10"
-        android:hint="SEARCH HERE">
+        android:text="@string/map_track_me_button_text"
+        android:id="@+id/track_switch" />
 
-        <requestFocus />
-    </AutoCompleteTextView>
 
+    <RelativeLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <Button
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_alignParentRight="true"
+            android:id="@+id/clear_button"
+            android:background="@drawable/x"/>
+
+        <AutoCompleteTextView
+            android:id="@+id/map_activity_search_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_toLeftOf="@id/clear_button"
+            android:singleLine="true"
+            android:ems="10"
+            android:hint="SEARCH HERE">
+
+            <requestFocus />
+        </AutoCompleteTextView>
+
+
+    </RelativeLayout>
 
     <fragment
         android:id="@+id/map"
