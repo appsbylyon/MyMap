@@ -1,4 +1,4 @@
-package com.appsbylyon.mymap.app;
+package com.appsbylyon.mymap.app.objects;
 
 import com.google.android.gms.maps.model.LatLng;
 
@@ -11,22 +11,26 @@ public class ALocation implements Serializable
 {
     private static final long serialVersionUID = 885466L;
 
-    private LatLng location;
+    private double latitude;
+    private double longitude;
     private String title;
     private int icon;
 
-    public ALocation(LatLng location, String title)
+    public ALocation(double latitude, double longitude, String title, int iconResource)
     {
-        this.setLocation(location);
+        this.setLocation(latitude, longitude);
         this.setTitle(title);
+        this.icon = iconResource;
     }
 
     public LatLng getLocation() {
-        return location;
+        return new LatLng(latitude, longitude);
     }
 
-    public void setLocation(LatLng location) {
-        this.location = location;
+    public void setLocation(double latitude, double longitude)
+    {
+        this.latitude = latitude;
+        this.longitude = longitude;
     }
 
     public String getTitle() {

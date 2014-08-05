@@ -1,4 +1,4 @@
-package com.appsbylyon.mymap.app;
+package com.appsbylyon.mymap.app.objects;
 
 import java.io.Serializable;
 import java.util.ArrayList;

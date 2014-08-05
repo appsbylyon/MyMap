@@ -1,4 +1,4 @@
-package com.appsbylyon.mymap.app;
+package com.appsbylyon.mymap.app.custom;
 
 import android.content.Context;
 import android.view.View;

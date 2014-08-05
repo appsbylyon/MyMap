@@ -1,4 +1,4 @@
-package com.appsbylyon.mymap.app;
+package com.appsbylyon.mymap.app.activities;
 
 
 import android.app.Activity;
@@ -6,7 +6,6 @@ import android.app.FragmentManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.graphics.Point;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
@@ -16,21 +15,27 @@ import android.preference.PreferenceManager;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
-import android.view.Display;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
-import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
-import android.widget.CompoundButton;
-import android.widget.Switch;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.appsbylyon.mymap.R;
-import com.appsbylyon.mymap.app.com.appsbylyon.mymap.app.fragments.NewLocationDialog;
+import com.appsbylyon.mymap.app.custom.AppWide;
+import com.appsbylyon.mymap.app.custom.CustomAutoCompleteAdapter;
+import com.appsbylyon.mymap.app.custom.MapState;
+import com.appsbylyon.mymap.app.fragments.NewLocationDialog;
+import com.appsbylyon.mymap.app.fragments.OpenLocationDialog;
+import com.appsbylyon.mymap.app.io.FileManager;
+import com.appsbylyon.mymap.app.map.GMapV2Direction;
+import com.appsbylyon.mymap.app.objects.ALocation;
+import com.appsbylyon.mymap.app.objects.ResultBundle;
+import com.appsbylyon.mymap.app.objects.SavedLocations;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesClient.ConnectionCallbacks;
 import com.google.android.gms.common.GooglePlayServicesClient.OnConnectionFailedListener;
@@ -44,12 +49,12 @@ import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.PolylineOptions;
 
 import org.w3c.dom.Document;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -58,23 +63,20 @@ import java.util.Map;
 
 public class MapActivity extends Activity implements ConnectionCallbacks, OnConnectionFailedListener,
         LocationListener, OnMyLocationButtonClickListener, OnItemClickListener, View.OnClickListener,
-        NewLocationDialog.NewLocationDialogListener
+        NewLocationDialog.NewLocationDialogListener, OpenLocationDialog.OpenLocationDialogListener,
+        GoogleMap.OnMapClickListener, GoogleMap.OnMarkerClickListener, GoogleMap.OnCameraChangeListener
 {
+    private AppWide appWide = AppWide.getInstance();
+
     private GoogleMap mMap;
+
     private LocationClient mLocationClient;
 
-    private Geocoder geoCoder;
+    private FileManager fileManager = FileManager.getInstance();
 
     private AutoCompleteTextView searchBar;
-    private TextView locationLabel;
-    private TextView savedLocationLabel;
 
-    private Button saveButton;
-    private Button directionsButton;
-    private Button gotoButton;
     private Button clearButton;
-
-    private Switch trackSwitch;
 
     private SharedPreferences prefs;
 
@@ -82,15 +84,8 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
     private ArrayList<String> results = new ArrayList<String>();
 
     private InputMethodManager imm;
-    private ArrayAdapter<String> searchAdapter;
 
     private long lastSearch;
-
-    private double savedLat;
-    private double savedLong;
-    private String savedTitle;
-
-    private boolean hasSaved;
 
     private double currLat = -360;
     private double currLong = 0;
@@ -102,10 +97,12 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
     private ArrayList<LatLng> trackPoints = new ArrayList<LatLng>();
 
     private boolean isTracking = false;
+    private boolean getPointByTouch = false;
+    private boolean removeMarker = false;
 
-    private GMapV2Direction  md = new GMapV2Direction();
+    private SavedLocations locations;
 
-    private SaveLocations locations;
+    private MapState mapState;
 
 
     private static final LocationRequest REQUEST = LocationRequest.create()
@@ -119,51 +116,19 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_mapactivity);
-        Display display = getWindowManager().getDefaultDisplay();
-        Point size = new Point();
-        display.getSize(size);
-
-        prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        hasSaved = prefs.getBoolean(getString(R.string.pref_has_saved_location), false);
-
-        savedLocationLabel = (TextView) findViewById(R.id.map_saved_location);
-        savedLocationLabel.setText("No Location Saved");
-
-        if (hasSaved)
+        mapState = fileManager.loadMapState();
+        if (mapState == null)
         {
-            savedLat = (double) prefs.getFloat(getString(R.string.pref_saved_latitude), 0);
-            savedLong= (double) prefs.getFloat(getString(R.string.pref_saved_longitude), 0);
-            savedTitle = prefs.getString(getString(R.string.pref_saved_title), "DEFAULT");
-            savedLocationLabel.setText("Saved Location: "+savedLat+", "+savedLong);
+            mapState = new MapState();
+            new SaveMapState().execute();
         }
 
-        trackSwitch = (Switch) findViewById(R.id.track_switch);
-        trackSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
-                isTracking = isChecked;
-                if (!isChecked)
-                {
-                    trackPoints.clear();
-                    updateTrack(null);
-                }
-            }
-        });
+        locations = fileManager.loadLocations();
 
-        saveButton = (Button) findViewById(R.id.map_save_button);
-        saveButton.setOnClickListener(this);
-
-        directionsButton = (Button) findViewById(R.id.map_directions_button);
-        directionsButton.setOnClickListener(this);
-
-        gotoButton = (Button) findViewById(R.id.map_goto_button);
-        gotoButton.setOnClickListener(this);
+        prefs = PreferenceManager.getDefaultSharedPreferences(this);
 
         clearButton = (Button) findViewById(R.id.clear_button);
         clearButton.setOnClickListener(this);
-
-        locationLabel = (TextView) findViewById(R.id.map_location_label);
-        locationLabel.setText("No Location");
 
         imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
 
@@ -188,10 +153,60 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
 
         searchBar.setOnItemClickListener(this);
 
-        geoCoder =  new Geocoder(this, Locale.US);
         this.setUpMapIfNeeded();
 
 
+    }
+
+    @Override
+    public boolean onMarkerClick(Marker marker)
+    {
+        if (removeMarker)
+        {
+            removeMarker = false;
+            marker.remove();
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public void onMapClick(LatLng point)
+    {
+        if (getPointByTouch)
+        {
+            getPointByTouch = false;
+            this.showNewLocationDialog(point.latitude, point.longitude);
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu)
+    {
+        getMenuInflater().inflate(R.menu.mapactivity_menu, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item)
+    {
+        int id = item.getItemId();
+
+        switch (id)
+        {
+            case R.id.action_add_location_by_touch:
+                this.getPointByTouch = true;
+                Toast.makeText(this, "Click Map To Add Location", Toast.LENGTH_SHORT).show();
+                break;
+            case R.id.action_remove_marker:
+                this.removeMarker = true;
+                Toast.makeText(this, "Click Marker To Remove", Toast.LENGTH_SHORT).show();
+                break;
+            case R.id.action_location_manager:
+                this.showOpenLocationDialog();
+                break;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     @Override
@@ -202,44 +217,6 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
         Bundle bundle = new Bundle();
         switch(id)
         {
-            case R.id.map_save_button:
-
-                if (currLat != -360)
-                {
-                    NewLocationDialog newLoc = new NewLocationDialog();
-                    bundle.putDouble(getString(R.string.new_location_lat_id), currLat);
-                    bundle.putDouble(getString(R.string.new_location_long_id), currLong);
-                    newLoc.setArguments(bundle);
-                    newLoc.show(fm, "new_location_fragment_layout");
-                    /**
-                    SharedPreferences.Editor edit = prefs.edit();
-                    edit.putFloat(getString(R.string.pref_saved_latitude), (float) currLat);
-                    edit.putFloat(getString(R.string.pref_saved_longitude), (float) currLong);
-                    edit.putString(getString(R.string.pref_saved_title), currTitle);
-                    edit.putBoolean(getString(R.string.pref_has_saved_location), true);
-                    edit.apply();
-                    savedLocationLabel.setText("Saved Location: " + currLat + ", " + currLong);
-                    savedLat = currLat;
-                    savedLong = currLong;
-                     */
-                }
-                break;
-            case R.id.map_goto_button:
-                if (hasSaved)
-                {
-                    addMarker(savedLat, savedLong, savedTitle);
-                    zoomToAddress(savedLat, savedLong);
-                }
-                break;
-            case R.id.map_directions_button:
-                if(hasSaved && currLat != -360)
-                {
-                    LatLng fromPosition = new LatLng(savedLat, savedLong);
-                    LatLng toPosition = new LatLng(currLat, currLong);
-
-                    findDirections(savedLat, savedLong, currLat, currLong, GMapV2Direction.MODE_DRIVING );
-                }
-                break;
             case R.id.clear_button:
                 searchBar.setText("");
                 break;
@@ -254,28 +231,6 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
         this.setUpMapIfNeeded();
         setUpLocationClientIfNeeded();
         mLocationClient.connect();
-    }
-
-    private List<Address> getAddresses(String searchName)
-    {
-        if (Geocoder.isPresent())
-        {
-            try
-            {
-                return geoCoder.getFromLocationName(searchName, 5);
-            }
-            catch(IOException IOE)
-            {
-                Toast.makeText(this, "Unable to get location info", Toast.LENGTH_SHORT).show();
-                Log.e("GeoAddress", "Failed to get location info", IOE);
-                return null;
-            }
-        }
-        else
-        {
-            Toast.makeText(this, "GeoCoder is Unavailable!", Toast.LENGTH_SHORT).show();
-            return null;
-        }
     }
 
     private void zoomToAddress(Address address)
@@ -296,37 +251,42 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
         mMap.animateCamera(CameraUpdateFactory.newCameraPosition(camPos));
     }
 
+    private void restoreMapState()
+    {
+        mMap.animateCamera(CameraUpdateFactory.newCameraPosition(mapState.getCameraPosition()));
+    }
+
     @Override
     public void onPause()
     {
         super.onPause();
+        new SaveMapState().execute();
         if (mLocationClient != null) {
             mLocationClient.disconnect();
         }
     }
 
-        private void setUpMapIfNeeded() {
-        // Do a null check to confirm that we have not already instantiated the map.
-        if (mMap == null) {
-            // Try to obtain the map from the SupportMapFragment.
-            mMap = ((MapFragment) getFragmentManager().findFragmentById(R.id.map))
-                    .getMap();
-            // Check if we were successful in obtaining the map.
-
+    private void setUpMapIfNeeded()
+    {
+        if (mMap == null)
+        {
+            mMap = ((MapFragment) getFragmentManager().findFragmentById(R.id.map)).getMap();
             if (mMap != null) {
                 mMap.setMyLocationEnabled(true);
                 mMap.setOnMyLocationButtonClickListener(this);
-
+                mMap.setOnMapClickListener(this);
+                mMap.setOnMarkerClickListener(this);
+                mMap.setOnCameraChangeListener(this);
+                this.restoreMapState();
             }
         }
     }
 
-    private void setUpLocationClientIfNeeded() {
-        if (mLocationClient == null) {
-            mLocationClient = new LocationClient(
-                    getApplicationContext(),
-                    this,  // ConnectionCallbacks
-                    this); // OnConnectionFailedListener
+    private void setUpLocationClientIfNeeded()
+    {
+        if (mLocationClient == null)
+        {
+            mLocationClient = new LocationClient(getApplicationContext(),this, this);
         }
     }
 
@@ -342,8 +302,6 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
         marker.title(currTitle);
         marker.icon(BitmapDescriptorFactory.fromResource(R.drawable.infinity));
         mMap.addMarker(marker);
-        setCurrLocationLabel();
-
     }
 
     private void addMarker(double lat, double mLong, String mTitle)
@@ -357,17 +315,15 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
         marker.title(mTitle);
         marker.icon(BitmapDescriptorFactory.fromResource(R.drawable.infinity));
         mMap.addMarker(marker);
-        setCurrLocationLabel();
-
     }
 
     @Override
     public void onLocationChanged(Location location)
     {
-        lastMyLat = location.getLatitude();
-        lastMyLong = location.getLongitude();
         if (isTracking)
         {
+            lastMyLat = location.getLatitude();
+            lastMyLong = location.getLongitude();
             updateTrack(location);
             zoomToAddress(lastMyLat, lastMyLong);
         }
@@ -391,11 +347,7 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
     }
 
     @Override
-    public void onConnected(Bundle connectionHint) {
-        mLocationClient.requestLocationUpdates(
-                REQUEST,
-                this);  // LocationListener
-    }
+    public void onConnected(Bundle connectionHint) {mLocationClient.requestLocationUpdates(REQUEST,this);}
 
     @Override
     public void onDisconnected() {}
@@ -404,19 +356,7 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
     public void onConnectionFailed(ConnectionResult result) {}
 
     @Override
-    public boolean onMyLocationButtonClick()
-    {
-        currLat = lastMyLat;
-        currLong = lastMyLong;
-        currTitle = "My Last Location";
-        setCurrLocationLabel();
-        return false;
-    }
-
-    private void setCurrLocationLabel()
-    {
-        locationLabel.setText("Location: "+currLat+", "+currLong);
-    }
+    public boolean onMyLocationButtonClick(){return false;}
 
     @Override
     public void onItemClick(AdapterView<?> parent, View view, int position, long rowId)
@@ -431,9 +371,81 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
     @Override
     public void saveLocation(ALocation newLocation)
     {
-
+        new SaveLocations().execute(newLocation);
     }
 
+    @Override
+    public void updateLocations(SavedLocations locations)
+    {
+        this.locations = locations;
+        new SaveLocations().execute();
+    }
+
+    @Override
+    public void markLocation(ALocation location)
+    {
+        String title = location.getTitle();
+        int iconId = appWide.getIcons().get(location.getIcon()).getIconResourceId();
+        MarkerOptions marker = new MarkerOptions();
+        marker.position(location.getLocation());
+        marker.title(title);
+        marker.icon(BitmapDescriptorFactory.fromResource(iconId));
+         mMap.addMarker(marker);
+    }
+
+    @Override
+    public void gotoLocation(ALocation location)
+    {
+        LatLng latLng = location.getLocation();
+        double mLat = latLng.latitude;
+        double mLong = latLng.longitude;
+        this.zoomToAddress(mLat, mLong);
+    }
+
+    @Override
+    public SavedLocations getLocations() {
+        return locations;
+    }
+
+
+    private void showOpenLocationDialog()
+    {
+        if (locations != null)
+        {
+            if (locations.getNumberOfLocations() > 0)
+            {
+                FragmentManager fm = this.getFragmentManager();
+                OpenLocationDialog openLocationDialog = new OpenLocationDialog();
+                openLocationDialog.show(fm, "open_location_fragment");
+            }
+            else
+            {
+                Toast.makeText(this, "No Saved Locations To Open!", Toast.LENGTH_SHORT).show();
+            }
+        }
+        else
+        {
+            Toast.makeText(this, "No Saved Locations To Open!", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void showNewLocationDialog(double lat, double lng)
+    {
+        FragmentManager fm = this.getFragmentManager();
+        Bundle bundle = new Bundle();
+        NewLocationDialog newLoc = new NewLocationDialog();
+        bundle.putDouble(getString(R.string.new_location_lat_id), lat);
+        bundle.putDouble(getString(R.string.new_location_long_id), lng);
+        newLoc.setArguments(bundle);
+        newLoc.show(fm, "new_location_fragment_layout");
+    }
+
+    @Override
+    public void onCameraChange(CameraPosition cameraPosition)
+    {
+        mapState.updateCameraPosition(cameraPosition);
+        Log.i("MapActivity", "Camera Position Changed!");
+    }
 
     private class SearchAddress extends AsyncTask<String, String, ResultBundle>
     {
@@ -560,30 +572,20 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
         public static final String DESTINATION_LONG = "destination_long";
         public static final String DIRECTIONS_MODE = "directions_mode";
         private MapActivity activity;
-        private String url;
 
         private Exception exception;
-
-        //private Dialog progressDialog;
 
         public GetDirectionsAsyncTask(MapActivity activity /*String url*/)
         {
             super();
             this.activity = activity;
-
-            //  this.url = url;
-        }
-
-        public void onPreExecute() {
-            //progressDialog = DialogUtils.createProgressDialog(activity, activity.getString(R.string.get_data_dialog_message));
-            //progressDialog.show();
         }
 
         @Override
-        public void onPostExecute(ArrayList<LatLng> result) {
-           // progressDialog.dismiss();
-
-            if (exception == null) {
+        public void onPostExecute(ArrayList<LatLng> result)
+        {
+            if (exception == null)
+            {
                 activity.handleGetDirectionsResult(result);
             } else {
                 processException();
@@ -615,16 +617,48 @@ public class MapActivity extends Activity implements ConnectionCallbacks, OnConn
 
     }
 
-    private class SaveLocations extends AsyncTask<ALocation, Void, Void>
+    private class SaveLocations extends AsyncTask<ALocation, Boolean, Void>
     {
         @Override
-        protected Void doInBackground(ALocation... arg0)
+        protected Void doInBackground(ALocation... newLocation)
         {
-
+            if (locations == null)
+            {
+                locations = new SavedLocations();
+            }
+            if (newLocation.length > 0)
+            {
+                locations.addLocation(newLocation[0]);
+            }
+            this.publishProgress(fileManager.saveLocations(locations));
             return null;
+        }
+
+        protected void onProgressUpdate(Boolean ... results)
+        {
+            boolean result = results[0];
+            if (result)
+            {
+                Toast.makeText(MapActivity.this, "My Locations Saved", Toast.LENGTH_SHORT).show();
+            }
+            else
+            {
+                Toast.makeText(MapActivity.this, "Error Saving My Locations!", Toast.LENGTH_SHORT).show();
+            }
         }
 
 
     }
-}
 
+    private class SaveMapState extends AsyncTask<Void, Void, Void>
+    {
+        @Override
+        protected Void doInBackground(Void... newLocation)
+        {
+            fileManager.saveMapState(mapState);
+            return null;
+        }
+    }
+
+
+}

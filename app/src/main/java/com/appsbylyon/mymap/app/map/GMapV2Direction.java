@@ -1,4 +1,4 @@
-package com.appsbylyon.mymap.app;
+package com.appsbylyon.mymap.app.map;
 import java.io.InputStream;
 import java.util.ArrayList;
 

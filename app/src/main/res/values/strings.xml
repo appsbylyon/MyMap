@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
+    <string name="action_add_location_by_touch">Add By Touch</string>
+    <string name="action_remove_marker">Remove Marker</string>
+    <string name="action_location_manager">Manage My Locations</string>
     <string name="app_name">MyMap</string>
     <string name="hello_world">Hello world!</string>
     <string name="action_settings">Settings</string>
@@ -20,6 +23,14 @@
     <string name="new_location_icon_label_text">Icon:</string>
     <string name="new_location_lat_id">lat</string>
     <string name="new_location_long_id">long</string>
+    <string name="open_location_delete_button_label">Delete</string>
+    <string name="open_location_goto_button_label">Goto</string>
+    <string name="open_location_mark_button_label">Mark</string>
+    <string name="open_location_done_button_label">Done</string>
+    <string name="open_location_dialog_title">Open Location</string>
+
+
     <dimen name="standard_text_size">20dp</dimen>
     <dimen name="standard_marker_size">40dp</dimen>
+
 </resources>

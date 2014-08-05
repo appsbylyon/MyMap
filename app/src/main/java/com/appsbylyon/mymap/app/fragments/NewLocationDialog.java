@@ -1,18 +1,23 @@
-package com.appsbylyon.mymap.app.com.appsbylyon.mymap.app.fragments;
+package com.appsbylyon.mymap.app.fragments;
 
 import android.app.DialogFragment;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
 
 import com.appsbylyon.mymap.R;
-import com.appsbylyon.mymap.app.ALocation;
+import com.appsbylyon.mymap.app.custom.AppWide;
+import com.appsbylyon.mymap.app.custom.IconChooserAdapter;
+import com.appsbylyon.mymap.app.objects.ALocation;
 
 /**
  * Created by infinite on 8/3/2014.
@@ -23,6 +28,8 @@ public class NewLocationDialog extends DialogFragment implements View.OnClickLis
     {
         public void saveLocation(ALocation newLocation);
     }
+
+    private AppWide appWide = AppWide.getInstance();
 
     private NewLocationDialogListener activity;
 
@@ -38,6 +45,10 @@ public class NewLocationDialog extends DialogFragment implements View.OnClickLis
 
     private double currLat;
     private double currLong;
+
+    private boolean isLayoutTrigger = true;
+
+    private int selectedIcon = 0;
 
     @Override
     public View onCreateView (LayoutInflater inflater, ViewGroup container,
@@ -69,6 +80,49 @@ public class NewLocationDialog extends DialogFragment implements View.OnClickLis
 
         confirmButton = (Button) view.findViewById(R.id.new_layout_confirm_button);
         confirmButton.setOnClickListener(this);
+        confirmButton.setEnabled(false);
+
+        titleEntry.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence charSequence, int i, int i2, int i3) { }
+
+            @Override
+            public void onTextChanged(CharSequence text, int i, int i2, int i3)
+            {
+                if (text.length() > 0)
+                {
+                    NewLocationDialog.this.confirmButton.setEnabled(true);
+                }
+                else
+                {
+                    NewLocationDialog.this.confirmButton.setEnabled(false);
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable editable) {}
+        });
+
+        IconChooserAdapter adapter = new IconChooserAdapter(getActivity(), appWide.getIcons());
+        iconSelector.setAdapter(adapter);
+
+        iconSelector.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l)
+            {
+                if (!isLayoutTrigger)
+                {
+                    selectedIcon = i;
+                }
+                else
+                {
+                    isLayoutTrigger = false;
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {}
+        });
 
         return view;
     }
@@ -84,6 +138,8 @@ public class NewLocationDialog extends DialogFragment implements View.OnClickLis
                 this.dismiss();
                 break;
             case R.id.new_layout_confirm_button:
+                activity.saveLocation(new ALocation(currLat, currLong,
+                        titleEntry.getText().toString().trim(), selectedIcon));
                 this.dismiss();
                 break;
         }
